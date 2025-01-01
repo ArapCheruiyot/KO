@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Drive File Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #file-upload, #file-list, #delete-file {
+            margin-top: 20px;
+        }
+        #file-upload button, #file-list button, #delete-file button {
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #file-list {
+            margin-top: 20px;
+        }
+        #file-list ul {
+            list-style-type: none;
+        }
+        #file-list li {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Google Drive File Management</h2>
+
+    <!-- Google Sign-In Button -->
+    <div id="google-signin">
+        <button id="sign-in-button" onclick="signIn()">Sign in with Google</button>
+    </div>
+
+    <!-- File Management Section -->
+    <div id="file-management" style="display:none;">
+        <!-- File Selection -->
+        <div id="file-upload">
+            <input type="file" id="file-input" />
+            <button onclick="uploadFile()">Upload File to Google Drive</button>
+        </div>
+
+        <!-- File List (for deletion) -->
+        <div id="file-list">
+            <h3>My Files on Google Drive</h3>
+            <ul id="files"></ul>
+        </div>
+
+        <!-- Delete File Section -->
+        <div id="delete-file">
+            <h3>Delete File</h3>
+            <button onclick="deleteFile()">Delete Selected File</button>
+        </div>
+    </div>
+
+    <!-- Google API -->
+    <script src="https://apis.google.com/js/api.js"></script>
+
+    <script>
+        let gapiAuth2;
+
+        // Load the Google API client
+        function loadClient() {
+            gapi.load('client:auth2', initClient);
+        }
+
+        // Initialize the Google API client with the Client ID
+        function initClient() {
+            gapiAuth2 = gapi.auth2.init({
+                client_id: '534160681000-2c5jtro940cnvd7on62jf022f52h8pfu.apps.googleusercontent.com',
+                scope: 'https://www.googleapis.com/auth/drive.file'
+            });
+
+            gapiAuth2.isSignedIn.listen(updateSigninStatus);
+        }
+
+        // Sign in function
+        function signIn() {
+            gapiAuth2.signIn().then(() => {
+                updateSigninStatus();
+            });
+        }
+
+        // Handle Sign-In Status
+        function updateSigninStatus() {
+            if (gapiAuth2.isSignedIn.get()) {
+                document.getElementById('google-signin').style.display = 'none';
+                document.getElementById('file-management').style.display = 'block';
+                listFiles();
+            } else {
+                document.getElementById('google-signin').style.display = 'block';
+                document.getElementById('file-management').style.display = 'none';
+            }
+        }
+
+        // List files from Google Drive
+        function listFiles() {
+            gapi.client.drive.files.list({
+                'pageSize': 10,
+                'fields': "nextPageToken, files(id, name)"
+            }).then((response) => {
+                let files = response.result.files;
+                let fileList = document.getElementById('files');
+                fileList.innerHTML = '';
+                if (files && files.length > 0) {
+                    files.forEach((file) => {
+                        let li = document.createElement('li');
+                        li.textContent = file.name;
+                        li.setAttribute('data-id', file.id);
+                        li.onclick = function() {
+                            this.classList.toggle('selected');
+                        };
+                        fileList.appendChild(li);
+                    });
+                } else {
+                    fileList.innerHTML = 'No files found.';
+                }
+            });
+        }
+
+        // Upload a file to Google Drive
+        function uploadFile() {
+            let fileInput = document.getElementById('file-input');
+            let file = fileInput.files[0];
+            if (!file) return alert('No file selected.');
+
+            let metadata = {
+                'name': file.name,
+                'mimeType': file.type
+            };
+
+            let formData = new FormData();
+            formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            formData.append('file', file);
+
+            gapi.client.drive.files.create({
+                resource: metadata,
+                media: {
+                    mimeType: file.type,
+                    body: file
+                }
+            }).then((response) => {
+                alert('File uploaded successfully.');
+                listFiles();
+            });
+        }
+
+        // Delete a file from Google Drive
+        function deleteFile() {
+            let selectedFile = document.querySelector('.selected');
+            if (!selectedFile) return alert('No file selected for deletion.');
+
+            let fileId = selectedFile.getAttribute('data-id');
+
+            gapi.client.drive.files.delete({
+                'fileId': fileId
+            }).then(() => {
+                alert('File deleted successfully.');
+                listFiles();
+            });
+        }
+
+        // Handle OAuth Callback
+        function handleAuthCallback() {
+            const params = new URLSearchParams(window.location.search);
+            const authCode = params.get('code');
+            
+            if (authCode) {
+                // Exchange authorization code for access token
+                gapi.auth2.getAuthInstance().grantOfflineAccess({
+                    'redirect_uri': 'https://arapcheruiyot.github.io/lakwet/oauth2/callback'
+                }).then(function(authResult) {
+                    console.log(authResult);
+                    listFiles();
+                });
+            }
+        }
+
+        // Call the callback handling function after the page loads
+        window.onload = handleAuthCallback;
+
+        // Load the Google API client
+        loadClient();
+    </script>
+</body>
+</html>
